@@ -780,7 +780,9 @@ function resetEnvSliders(month) {
     }
   });
 
-  document.getElementById('env-note').textContent = `defaults: month ${month} medians`;
+  const MONTH_NAMES = ['','January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+  document.getElementById('env-note').textContent = `defaults: ${MONTH_NAMES[month]} medians`;
 }
 
 /* ── Slider fill gradient ─────────────────────────────────── */
