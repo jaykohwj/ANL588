@@ -456,9 +456,12 @@ function updateLeafletMap(steps) {
     icon: L.divIcon({ className: 'map-label', html: '<span class="map-label-text exit">EXIT</span>', iconAnchor: [-4, 6] })
   }).addTo(routeLayer);
 
-  // Fit bounds with padding
-  const bounds = L.latLngBounds(latlngs).pad(0.1);
-  leafletMap.fitBounds(bounds);
+  // Fit bounds — invalidate first so Leaflet knows the real container size
+  setTimeout(() => {
+    leafletMap.invalidateSize();
+    const bounds = L.latLngBounds(latlngs).pad(0.1);
+    leafletMap.fitBounds(bounds);
+  }, 50);
 }
 
 /* ── Step table ───────────────────────────────────────────── */
