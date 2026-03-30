@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SOMS TRS Passage Planner</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="header-brand">
+    <span class="brand-icon">⚓</span>
+    <span class="brand-name">SOMS TRS Passage Planner</span>
+    <span class="brand-sub">Singapore Strait</span>
+  </div>
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="transit">
+      <span class="tab-icon">🛳</span> Transit Planner
+    </button>
+    <button class="tab-btn" data-tab="heatmap">
+      <span class="tab-icon">🌡</span> Risk Heatmap
+    </button>
+  </nav>
+  <div class="header-badge">
+    <span class="badge-dot"></span> IF · n=288 · 2022–2025
+  </div>
+</header>
+
+<!-- ── Loading overlay ─────────────────────────────────────────────────────── -->
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Loading risk model…</div>
+  <div class="loading-sub" id="loading-sub">Initialising</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB 1 — TRANSIT PLANNER                                                   -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<section id="tab-transit" class="tab-content active">
+  <div class="transit-layout">
+
+    <!-- ── Input Panel ─────────────────────────────────────────────────────── -->
+    <aside class="input-panel">
+
+      <div class="panel-section">
+        <h3 class="section-title">Vessel &amp; Passage</h3>
+
+        <label class="field-label">Ship Type</label>
+        <select id="t-ship" class="field-select"></select>
+
+        <label class="field-label">Direction</label>
+        <div class="radio-group" id="t-dir-group">
+          <label class="radio-opt active" data-val="Eastbound Lane">
+            <span class="radio-dot"></span> Eastbound
+          </label>
+          <label class="radio-opt" data-val="Westbound Lane">
+            <span class="radio-dot"></span> Westbound
+          </label>
+        </div>
+
+        <label class="field-label">Month of Transit</label>
+        <select id="t-month" class="field-select"></select>
+
+        <label class="field-label">
+          Entry Hour (SGT)
+          <span class="field-val" id="t-hour-val">06:00</span>
+        </label>
+        <input type="range" id="t-hour" class="field-slider" min="0" max="23" value="6"/>
+
+        <label class="field-label">
+          Speed (knots)
+          <span class="field-val" id="t-speed-val">12 kn</span>
+        </label>
+        <input type="range" id="t-speed" class="field-slider" min="5" max="20" value="12"/>
+      </div>
+
+      <div class="panel-section">
+        <h3 class="section-title">
+          Environmental Conditions
+          <span class="section-note" id="env-note"></span>
+        </h3>
+
+        <label class="field-label">
+          Wind Speed (km/h)
+          <span class="field-val" id="t-wind-val">—</span>
+        </label>
+        <input type="range" id="t-wind" class="field-slider" min="0" max="60" step="0.5"/>
+
+        <label class="field-label">
+          Cloud Cover (%)
+          <span class="field-val" id="t-cloud-val">—</span>
+        </label>
+        <input type="range" id="t-cloud" class="field-slider" min="0" max="100" step="1"/>
+
+        <label class="field-label">
+          Lunar Illumination (%)
+          <span class="field-val" id="t-lunar-val">—</span>
+        </label>
+        <input type="range" id="t-lunar" class="field-slider" min="0" max="100" step="1"/>
+
+        <label class="field-label">
+          Traffic Anomaly (%)
+          <span class="field-val" id="t-anomaly-val">—</span>
+        </label>
+        <input type="range" id="t-anomaly" class="field-slider" min="-20" max="20" step="0.5"/>
+      </div>
+
+      <button id="btn-run" class="btn-primary">▶&nbsp; Run Risk Assessment</button>
+
+      <div class="band-legend">
+        <div class="legend-item" style="--bc:#2ca02c">LOW</div>
+        <div class="legend-item" style="--bc:#ff7f0e">MODERATE</div>
+        <div class="legend-item" style="--bc:#d62728">HIGH</div>
+        <div class="legend-item" style="--bc:#7b0000">CRITICAL</div>
+      </div>
+    </aside>
+
+    <!-- ── Output Panel ─────────────────────────────────────────────────────── -->
+    <div class="output-panel">
+
+      <!-- Welcome state -->
+      <div id="welcome-state" class="welcome-state">
+        <div class="welcome-icon">⚓</div>
+        <h2>Singapore Strait Risk Planner</h2>
+        <p>Configure your vessel and passage parameters, then click <strong>Run Risk Assessment</strong> to simulate the transit and score Tactical Risk at each 15-minute interval.</p>
+        <div class="threshold-row" id="threshold-row"></div>
+        <p class="welcome-note">Model: Isolation Forest · 288 SOMS incidents · 2022–2025 · 17 features</p>
+      </div>
+
+      <!-- Results state -->
+      <div id="results-state" class="hidden">
+
+        <!-- KPI row -->
+        <div class="kpi-row" id="kpi-row"></div>
+
+        <!-- Charts row -->
+        <div class="charts-row">
+          <div class="chart-card chart-card-wide">
+            <div class="chart-title">TRS Along Passage</div>
+            <canvas id="chart-transit" height="200"></canvas>
+          </div>
+          <div class="chart-card chart-card-map">
+            <div class="chart-title">Route Map</div>
+            <div id="map-route"></div>
+          </div>
+        </div>
+
+        <!-- Step table -->
+        <div class="table-card">
+          <div class="chart-title">Step-by-Step Breakdown</div>
+          <div class="table-scroll">
+            <table id="table-transit">
+              <thead>
+                <tr>
+                  <th>Elapsed</th><th>SGT</th><th>Lat °N</th><th>Lon °E</th>
+                  <th>Jurisdiction</th><th>Time</th><th>TRS</th><th>Band</th>
+                </tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Band summary -->
+        <div class="band-summary" id="band-summary"></div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB 2 — STRAIT RISK HEATMAP                                               -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<section id="tab-heatmap" class="tab-content hidden">
+
+  <!-- Controls bar -->
+  <div class="heatmap-controls">
+    <div class="hm-control-group">
+      <label class="hm-label">Ship Type</label>
+      <select id="hm-ship" class="field-select field-select-sm"></select>
+    </div>
+    <div class="hm-control-group">
+      <label class="hm-label">Month</label>
+      <select id="hm-month" class="field-select field-select-sm"></select>
+    </div>
+    <div class="hm-control-group">
+      <label class="hm-label">Direction</label>
+      <div class="radio-group radio-group-sm" id="hm-dir-group">
+        <label class="radio-opt active" data-val="Eastbound Lane">
+          <span class="radio-dot"></span> Eastbound
+        </label>
+        <label class="radio-opt" data-val="Westbound Lane">
+          <span class="radio-dot"></span> Westbound
+        </label>
+      </div>
+    </div>
+    <div class="hm-control-group">
+      <label class="hm-label">
+        Entry Hour
+        <span class="field-val" id="hm-hour-val">06:00</span>
+      </label>
+      <input type="range" id="hm-hour" class="field-slider field-slider-sm"
+             min="0" max="23" value="6"/>
+    </div>
+    <div class="hm-control-group">
+      <label class="hm-label">
+        Speed (kn)
+        <span class="field-val" id="hm-speed-val">12</span>
+      </label>
+      <input type="range" id="hm-speed" class="field-slider field-slider-sm"
+             min="5" max="20" value="12"/>
+    </div>
+  </div>
+
+  <!-- Two heatmaps side by side -->
+  <div class="heatmap-row">
+
+    <div class="chart-card heatmap-primary">
+      <div class="chart-title">
+        Strait Risk Landscape
+        <span class="chart-subtitle">Hour × Position along TSS · Dashed line = your transit trajectory</span>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="canvas-strait"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card heatmap-secondary">
+      <div class="chart-title">
+        Historical Risk Pattern
+        <span class="chart-subtitle">Month × Hour · max TRS from 2022–2025 incidents · number = incident count</span>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="canvas-monthour"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Colourbar -->
+  <div class="colourbar-row">
+    <span class="cb-label">LOW</span>
+    <div class="colourbar">
+      <div class="cb-seg" style="background:#2ca02c" id="cb-low"></div>
+      <div class="cb-tick" id="cb-t-low"></div>
+      <div class="cb-seg" style="background:#ff7f0e" id="cb-mod"></div>
+      <div class="cb-tick" id="cb-t-mod"></div>
+      <div class="cb-seg" style="background:#d62728" id="cb-high"></div>
+      <div class="cb-tick" id="cb-t-high"></div>
+      <div class="cb-seg" style="background:#7b0000" id="cb-crit"></div>
+    </div>
+    <span class="cb-label">CRITICAL</span>
+  </div>
+
+</section>
+
+<!-- ── Footer ──────────────────────────────────────────────────────────────── -->
+<footer class="app-footer">
+  <span>ANL588 · SUSS MAVI 2026 · Koh Wei Jin</span>
+  <span>Model: Isolation Forest · n=288 SOMS incidents · 17 features · Jenks thresholds</span>
+  <span>For academic research purposes only</span>
+</footer>
+
+<script src="js/app.js"></script>
+</body>
+</html>
