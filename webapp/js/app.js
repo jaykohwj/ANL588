@@ -911,6 +911,7 @@ function wireTransitControls() {
     resetEnvSliders(parseInt(e.target.value));
   });
 
+
   document.getElementById('btn-run').addEventListener('click', () => {
     if (!MODEL || !CFG) {
       alert('Model not loaded yet. Please wait.');

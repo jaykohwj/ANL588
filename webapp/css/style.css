@@ -167,9 +167,8 @@ body {
   margin-bottom: 12px;
 }
 .section-note {
-  display: block;
-  font-size: 0.72rem; color: var(--text-dim);
-  margin-top: -8px; margin-bottom: 10px;
+  font-size: 0.68rem; color: var(--text-dim);
+  margin-top: -8px; margin-bottom: 8px;
   font-style: italic;
 }
 
