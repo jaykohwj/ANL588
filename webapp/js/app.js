@@ -127,97 +127,35 @@ function interpolateRoute(segs, totalDist, fracDist) {
 
 /* ── Feature vector builder ───────────────────────────────── */
 function buildFeatureVector(params) {
-  // IF_FEATURES order from config.json
-  const feats = CFG.IF_FEATURES;
-  const vec   = new Array(feats.length).fill(0);
+  // Build lookup keyed by exact IF_FEATURES column names from config.json
+  const isDaytime = (params.sgtHour >= 6 && params.sgtHour < 18) ? 1 : 0;
+  // SOMS jurisdiction: Singapore (0) east of ~103.85°E, Indonesia (2) west
+  const jurCode = params.lon >= 103.85 ? 0 : 2;
+  const monthEnv = CFG.MONTHLY_ENV[params.month]
+                || CFG.MONTHLY_ENV[String(params.month)] || {};
+  const visScore = monthEnv.Est_Visibility_Score ?? 3.0;
 
-  const SHIP_ENC = CFG.SHIP_ENCODING;
-  const LANE_ENC = CFG.LANE_ENCODING;
-  const MONTH_ENC= CFG.MONTH_ENCODING;
-  const TIME_ENC = CFG.TIME_ENCODING;   // { Night: 0, Day: 1, Dawn: 2, Dusk: 3 }
+  const lookup = {
+    'Lat_DD':                    params.lat,
+    'Lon_DD':                    params.lon,
+    'Hour_Sin':                  Math.sin(2 * Math.PI * params.sgtHour / 24),
+    'Hour_Cos':                  Math.cos(2 * Math.PI * params.sgtHour / 24),
+    'Month_Sin':                 Math.sin(2 * Math.PI * params.month / 12),
+    'Month_Cos':                 Math.cos(2 * Math.PI * params.month / 12),
+    'Wind_Speed_10m_kmh':        params.wind,
+    'Cloud_Cover_%':             params.cloud,
+    'Effective_Lunar_Illum_%':   params.lunar,
+    'Is_Daytime_Int':            isDaytime,
+    'Est_Visibility_Score':      visScore,
+    'Traffic_Anomaly_%':         params.anomaly,
+    'Ship_Type_Enc':             CFG.SHIP_TYPE_RISK[params.shipType] ?? 0,
+    'Jurisdiction_Enc':          jurCode,
+    'Lane_Eastbound Lane':       params.lane === 'Eastbound Lane'  ? 1 : 0,
+    'Lane_Outside of TSS Lanes': 0,
+    'Lane_Westbound Lane':       params.lane === 'Westbound Lane'  ? 1 : 0,
+  };
 
-  // Determine time-of-day category
-  function timeCategory(hour) {
-    if (hour >= 6  && hour < 18) return 'Day';
-    if (hour >= 18 && hour < 21) return 'Dusk';
-    if (hour >= 21 || hour <  4) return 'Night';
-    return 'Dawn';   // 04–06
-  }
-
-  // Jurisdiction (0=Indonesia/international, 1=Singapore)
-  // Simple proxy: Eastbound 103.57–103.85 → mixed; use lon threshold
-  function jurisdiction(lon) {
-    return (lon >= 103.83) ? 1 : 0;
-  }
-
-  // Visibility score: use monthly median from config
-  const visScore = CFG.MONTHLY_ENV[params.month] ?
-    CFG.MONTHLY_ENV[params.month].Est_Visibility_Score : 2.5;
-
-  const timeCat = timeCategory(params.sgtHour);
-
-  for (let i = 0; i < feats.length; i++) {
-    const f = feats[i];
-    switch (f) {
-      case 'Ship_Type_Risk_Weight':
-        vec[i] = CFG.SHIP_TYPE_RISK[params.shipType] ?? 0.5;
-        break;
-      case 'Ship_Type_Category':
-        vec[i] = SHIP_ENC[params.shipType] ?? 0;
-        break;
-      case 'Lane_Direction':
-        vec[i] = LANE_ENC[params.lane] ?? 0;
-        break;
-      case 'Month_of_Year':
-        vec[i] = params.month;
-        break;
-      case 'Month_sin':
-        vec[i] = Math.sin(2 * Math.PI * params.month / 12);
-        break;
-      case 'Month_cos':
-        vec[i] = Math.cos(2 * Math.PI * params.month / 12);
-        break;
-      case 'Hour_of_Day':
-        vec[i] = params.sgtHour;
-        break;
-      case 'Hour_sin':
-        vec[i] = Math.sin(2 * Math.PI * params.sgtHour / 24);
-        break;
-      case 'Hour_cos':
-        vec[i] = Math.cos(2 * Math.PI * params.sgtHour / 24);
-        break;
-      case 'Time_of_Day':
-        vec[i] = TIME_ENC[timeCat] ?? 0;
-        break;
-      case 'Lat_DD':
-        vec[i] = params.lat;
-        break;
-      case 'Lon_DD':
-        vec[i] = params.lon;
-        break;
-      case 'Jurisdiction':
-        vec[i] = jurisdiction(params.lon);
-        break;
-      case 'Wind_Speed_kmh':
-        vec[i] = params.wind;
-        break;
-      case 'Cloud_Cover_pct':
-        vec[i] = params.cloud;
-        break;
-      case 'Lunar_Illumination_pct':
-        vec[i] = params.lunar;
-        break;
-      case 'Traffic_Volume_Anomaly_pct':
-        vec[i] = params.anomaly;
-        break;
-      case 'Est_Visibility_Score':
-        vec[i] = visScore;
-        break;
-      default:
-        vec[i] = 0;
-    }
-  }
-  return vec;
+  return CFG.IF_FEATURES.map(f => lookup[f] ?? 0);
 }
 
 /* ── Transit simulation ───────────────────────────────────── */
@@ -824,10 +762,10 @@ function resetEnvSliders(month) {
   if (!env) return;
 
   const fields = [
-    { id: 't-wind',   key: 'Wind_Speed_kmh',          valId: 't-wind-val',   suffix: ' km/h' },
-    { id: 't-cloud',  key: 'Cloud_Cover_pct',          valId: 't-cloud-val',  suffix: '%'     },
-    { id: 't-lunar',  key: 'Lunar_Illumination_pct',   valId: 't-lunar-val',  suffix: '%'     },
-    { id: 't-anomaly',key: 'Traffic_Volume_Anomaly_pct', valId: 't-anomaly-val', suffix: '%'  },
+    { id: 't-wind',   key: 'Wind_Speed_10m_kmh',        valId: 't-wind-val',   suffix: ' km/h' },
+    { id: 't-cloud',  key: 'Cloud_Cover_%',             valId: 't-cloud-val',  suffix: '%'     },
+    { id: 't-lunar',  key: 'Effective_Lunar_Illum_%',   valId: 't-lunar-val',  suffix: '%'     },
+    { id: 't-anomaly',key: 'Traffic_Anomaly_%',         valId: 't-anomaly-val', suffix: '%'    },
   ];
   fields.forEach(({ id, key, valId, suffix }) => {
     const slider = document.getElementById(id);
